@@ -1,0 +1,19 @@
+﻿# Build-Ausgaben
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+[Dd]ebug*/
+[Rr]elease*/
+
+# Visual Studio
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Cache / temporäre Dateien
+*.cache
+*.log
+*.tmp
+*.swp

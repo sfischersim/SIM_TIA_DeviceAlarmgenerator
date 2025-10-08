@@ -6,55 +6,288 @@
         xmlns:local="clr-namespace:SIM_TIA_DeviceAlarmgenerator.View"
         xmlns:localVM="clr-namespace:SIM_TIA_DeviceAlarmgenerator.ViewModel"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="MainWindow" Height="800" Width="1200"
+        Background="{StaticResource Brush.Background}">
+
+    <!-- === Window-spezifische Ressourcen / Aliasse === -->
+    <Window.Resources>
+        <!-- Alias, damit bestehende XAML 'Brush.Subtle' weiter nutzbar bleibt -->
+        <SolidColorBrush x:Key="Brush.Subtle" Color="{Binding Source={StaticResource Color.TextSecondary}}" />
+
+        <!-- Dünne Rahmenlinie für Header/Statusleisten -->
+        <Thickness x:Key="ThinBottomBorder">0,0,0,1</Thickness>
+
+        <!-- Halbtransparenter Overlay-Scrim für Busy-Overlay -->
+        <SolidColorBrush x:Key="Brush.Scrim" Color="#80000000"/>
+
+        <!-- Button-Grundstil (Sekundär/neutral) -->
+        <Style x:Key="NeutralButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource Brush.Surface}" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+        </Style>
+
+        <!-- Primär-Button (für Hauptaktionen wie Export) -->
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource NeutralButton}">
+            <Setter Property="Background" Value="{StaticResource Brush.Primary}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.PrimaryDark}" />
+        </Style>
+
+        <!-- DataGrid optisch an Palette anpassen -->
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="{StaticResource Brush.Surface}" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="GridLinesVisibility" Value="None" />
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{StaticResource Brush.Background}" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Border}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="8,6" />
+        </Style>
+    </Window.Resources>
+
     <Window.DataContext>
         <localVM:MainViewModel/>
     </Window.DataContext>
-    <Grid Margin="12">
+
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
+            <!-- Command Bar -->
             <RowDefinition Height="*"/>
+            <!-- Content -->
+            <RowDefinition Height="Auto"/>
+            <!-- Status -->
         </Grid.RowDefinitions>
 
-        <!-- Dateiauswahl -->
-        <StackPanel Orientation="Horizontal">
-            <Button x:Name="BtnPickFile" Command="{Binding PickFileCommand}" Padding="12,6">Datei wählen…</Button>
-            <TextBox x:Name="TxtFilePath" Text="{Binding FilePath}" Width="600" IsReadOnly="True" />
-        </StackPanel>
+        <!-- Command Bar -->
+        <Border Grid.Row="0"
+                Background="{StaticResource Brush.Surface}"
+                BorderBrush="{StaticResource Brush.Border}"
+                BorderThickness="{StaticResource ThinBottomBorder}">
+            <DockPanel LastChildFill="False" Margin="12,8">
+                <!-- Left: File + Actions -->
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                    <Button Style="{StaticResource PrimaryButton}" 
+                            Command="{Binding PickAndReadCommand}"
+                            ToolTip="Projektdatei auswählen und öffnen">
 
-        <!-- Sheet + Bereich -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,10,0,0">
-            <StackPanel>
-                <TextBlock>Sheet-Name</TextBlock>
-                <TextBox x:Name="TxtSheet"  Width="160" Text="{Binding SheetName}"/>
-            </StackPanel>
-            <StackPanel>
-                <TextBlock>Startzeile (1-basiert)</TextBlock>
-                <TextBox x:Name="TxtStartRow" Width="120" Text="{Binding StartRow}"/>
-            </StackPanel>
-            <StackPanel>
-                <TextBlock>Endzeile (inkl.)</TextBlock>
-                <TextBox x:Name="TxtEndRow" Width="120"  Text="{Binding EndRow}"/>
-            </StackPanel>
-            <StackPanel>
-                <TextBlock>Startspalte (1=A)</TextBlock>
-                <TextBox x:Name="TxtStartCol" Width="120"  Text="{Binding StartCol}"/>
-            </StackPanel>
-            <StackPanel>
-                <TextBlock>Endspalte (inkl.)</TextBlock>
-                <TextBox x:Name="TxtEndCol" Width="120"  Text="{Binding EndCol}"/>
-            </StackPanel>
-            <Button x:Name="BtnRead" Command="{Binding ReadDataCommand}" Padding="12,6" Margin="8,18,0,0">Bereich lesen</Button>
-        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="{StaticResource IconFont}" Text="" Margin="0,0,6,0"
+                                       Foreground="{StaticResource Brush.TextSecondary}"/>
+                            <TextBlock Text="Öffnen"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource PrimaryButton}" 
+                            Command="{Binding BuildAlarmsFromStaCfgCommand}"
+                            ToolTip="Alarme aus StA-Konfiguration generieren">
 
-        <!-- Hinweis -->
-        <TextBlock Grid.Row="2" Margin="0,8,0,8" Foreground="Gray">
-            Ausgabe: zeilenweise in einer Tabelle. Leere Zellen werden als "" angezeigt.
-        </TextBlock>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="{StaticResource IconFont}" Text="" Margin="0,0,6,0"
+                                       Foreground="{StaticResource Brush.TextSecondary}"/>
+                            <TextBlock Text="Alarme bauen"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource PrimaryButton}"
+                            Command="{Binding ExportAlarmDbCommand}"
+                            ToolTip="Generierte Alarme als Siemens DB exportieren">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="{StaticResource IconFont}" Text="" Margin="0,0,6,0" />
+                            <TextBlock Text="Alarm-DB exportieren"/>
+                        </StackPanel>
+                    </Button>
 
-        <!-- Ergebnis -->
-        <DataGrid Grid.Row="3" x:Name="GridResult" ItemsSource="{Binding Data}" AutoGenerateColumns="True" IsReadOnly="True"/>
+                    <Button Style="{StaticResource PrimaryButton}"
+                            Command="{Binding ExportHmiAlarmsCommand}"
+                            ToolTip="HMI-Meldungen als Excel exportieren">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="{StaticResource IconFont}" Text="" Margin="0,0,6,0"
+                                        Foreground="{StaticResource Brush.TextSecondary}"/>
+                            <TextBlock Text="HMI-Alarme (Excel)"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- Right: File path -->
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <TextBlock Text="Datei:" Foreground="{StaticResource Brush.TextSecondary}" Margin="0,0,6,0"/>
+                    <TextBlock Text="{Binding FilePath}" Width="420" TextTrimming="CharacterEllipsis"
+                               Foreground="{StaticResource Brush.TextPrimary}"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Contentbereich: Tabs + Log -->
+        <Grid Grid.Row="1" Margin="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="463*"/>
+                <ColumnDefinition Width="713*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Tabs mit Scrollbaren DataGrids -->
+            <TabControl Grid.Row="0" Background="{StaticResource Brush.Surface}" Margin="0,0,0,8" Grid.ColumnSpan="2">
+                <TabItem Header="Devices">
+                    <Border Background="{StaticResource Brush.Surface}"
+                    Padding="8"
+                    BorderBrush="{StaticResource Brush.Border}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Auto"
+                              MaxHeight="400">
+                            <DataGrid ItemsSource="{Binding DevicesPreview}"
+                              IsReadOnly="True"
+                              AutoGenerateColumns="True"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              Background="{StaticResource Brush.Surface}"
+                              Foreground="{StaticResource Brush.TextPrimary}"
+                              BorderBrush="{StaticResource Brush.Border}"
+                              BorderThickness="1"/>
+                        </ScrollViewer>
+                    </Border>
+                </TabItem>
+
+                <TabItem Header="StA-Cfg">
+                    <Border Background="{StaticResource Brush.Surface}"
+                    Padding="8"
+                    BorderBrush="{StaticResource Brush.Border}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Auto"
+                              MaxHeight="400">
+                            <DataGrid ItemsSource="{Binding NumbersPreview}"
+                              IsReadOnly="True"
+                              AutoGenerateColumns="True"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              Background="{StaticResource Brush.Surface}"
+                              Foreground="{StaticResource Brush.TextPrimary}"
+                              BorderBrush="{StaticResource Brush.Border}"
+                              BorderThickness="1"/>
+                        </ScrollViewer>
+                    </Border>
+                </TabItem>
+
+                <TabItem Header="AppAlarm">
+                    <Border Background="{StaticResource Brush.Surface}"
+                    Padding="8"
+                    BorderBrush="{StaticResource Brush.Border}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Auto"
+                              MaxHeight="400">
+                            <DataGrid ItemsSource="{Binding AppAlarmPreview}"
+                              IsReadOnly="True"
+                              AutoGenerateColumns="True"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              Background="{StaticResource Brush.Surface}"
+                              Foreground="{StaticResource Brush.TextPrimary}"
+                              BorderBrush="{StaticResource Brush.Border}"
+                              BorderThickness="1"/>
+                        </ScrollViewer>
+                    </Border>
+                </TabItem>
+            </TabControl>
+
+            <!-- Log der aktuellen Ereignisse -->
+            <Border Grid.Row="1"
+            Background="{StaticResource Brush.Surface}"
+            BorderBrush="{StaticResource Brush.Border}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Padding="8" Grid.ColumnSpan="2">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="140"/>
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,6">
+                        <TextBlock Text="Ereignis-Log" FontWeight="SemiBold"
+                           Foreground="{StaticResource Brush.TextPrimary}"/>
+                        <Button Style="{StaticResource SecondaryButton}"
+                        Margin="8,0,0,0"
+                        Command="{Binding ClearLogCommand}"
+                        ToolTip="Log leeren">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="{StaticResource IconFont}"
+                                   Text=""
+                                   Margin="0,0,6,0"
+                                   Foreground="{StaticResource Brush.TextSecondary}"/>
+                                <TextBlock Text="Leeren"/>
+                            </StackPanel>
+                        </Button>
+                    </DockPanel>
+
+                    <ListBox Grid.Row="1"
+                     ItemsSource="{Binding LogEntries}"
+                     Background="{StaticResource Brush.Surface}"
+                     Foreground="{StaticResource Brush.TextPrimary}"
+                     BorderBrush="{StaticResource Brush.Border}"
+                     BorderThickness="1"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.Resources>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="4,2"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Focusable" Value="False"/>
+                            </Style>
+                        </ListBox.Resources>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Grid>
+        <!-- Statusbar -->
+        <Border Grid.Row="2"
+                Background="{StaticResource Brush.Surface}"
+                BorderBrush="{StaticResource Brush.Border}"
+                BorderThickness="1,1,1,0">
+            <DockPanel Margin="12,6">
+                <TextBlock DockPanel.Dock="Left" Text="{Binding Status}" 
+                           Foreground="{StaticResource Brush.TextSecondary}"/>
+                <ProgressBar DockPanel.Dock="Right" Width="180" Height="6"
+                             IsIndeterminate="{Binding IsBusy}"
+                             Foreground="{StaticResource Brush.Primary}"
+                             Background="{StaticResource Brush.Border}"
+                             Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Busy Overlay: über das gesamte Fenster -->
+        <Grid Grid.RowSpan="3"
+      Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}"
+      Panel.ZIndex="9999"
+      IsHitTestVisible="True">
+            <!-- halbtransparenter Scrim -->
+            <Rectangle Fill="{StaticResource Brush.Scrim}"/>
+            <!-- Dialog in der Mitte -->
+            <Border Background="{StaticResource Brush.Surface}" CornerRadius="10" Padding="20" Width="220" Height="120">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <ProgressBar IsIndeterminate="True" Height="6" Margin="0,0,0,10"
+                         Foreground="{StaticResource Brush.Primary}"
+                         Background="{StaticResource Brush.Border}"/>
+                    <TextBlock Text="Bitte warten…" HorizontalAlignment="Center"
+                       Foreground="{StaticResource Brush.TextPrimary}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
     </Grid>
 </Window>

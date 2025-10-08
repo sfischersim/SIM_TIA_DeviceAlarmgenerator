@@ -4,8 +4,16 @@
              xmlns:local="clr-namespace:SIM_TIA_DeviceAlarmgenerator"
              StartupUri="/View/MainWindow.xaml"
              Startup="Application_Startup"
-             Exit="Application_Exit">
+             Exit="Application_Exit"
+             ShutdownMode="OnMainWindowClose">
     <Application.Resources>
-         
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Resources/Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Converter-Instanz: Name exakt so lassen -->
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>
