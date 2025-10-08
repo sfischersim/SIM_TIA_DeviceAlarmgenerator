@@ -18,8 +18,6 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
     /// </summary>
     public sealed class HmiAlarmsExporter
     {
-        private enum InsertMode { BeforeSq, AfterOmode, BeforeFirstSq, AfterLast }
-
         /// <summary>
         /// Exportiert alle diskreten Alarme in eine Excel-Datei (Tab „DiscreteAlarms“).
         /// 
@@ -32,8 +30,8 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
         ///   * Standardtext des Bits (aus ErrorsTemplate)
         ///   * Gerätespezifische Suffixe (z. B. B...GS/AS/MS bei 2DS/2DSPM für bestimmte Bits)
         ///   * Reserve-Texte pro Typ (z. B. "Omode_Reserve_d.{Instanz}", "SQ_Reserve_d.{Instanz}", ...)
+        /// - Die Alarmtexte für Alm16 werden aus dem Sheet "AppAlarm (_AA)" entnommen
         /// - Klasse "Warnings" wird ohne Ack-Tag exportiert (wie im Alt-Tool).
-        /// - Application-Alarme (falls vorhanden) werden abhängig von der Position von Omode/SQ eingefügt.
         /// - Optional kann <paramref name="appAlarmTextMap"/> bestimmte Bittexte überschreiben
         ///   (Schlüssel: (DevType, BitIndex0Based)); die Klasse bleibt aus der Rule.
         /// </summary>
@@ -53,6 +51,9 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
 
             using var wb = new XSSFWorkbook();
             var sh = wb.CreateSheet("DiscreteAlarms");
+
+            // Kontext für Alm16: aktuelle Instanz (1-basiert) für ComposeDeviceText
+            int currentDeviceIndex1Based = 1;
 
             // ------------------------------
             // Kopfzeile analog HMIAlarmsTest.xlsx
@@ -84,22 +85,6 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
             var labels = model.DeviceInstanceLabels ??
                          new Dictionary<string, Dictionary<int, DeviceInstanceLabel>>(StringComparer.OrdinalIgnoreCase);
             var appAlm = model.ApplicationAlarms ?? new List<AlarmBit>();
-
-            // ------------------------------
-            // Einfüge-Strategie für Applikationsalarme bestimmen
-            // ------------------------------
-            int idxOmode = types.FindIndex(t => string.Equals(t.DevName, "Omode", StringComparison.OrdinalIgnoreCase));
-            int idxSq = types.FindIndex(t => string.Equals(t.DevName, "SQ", StringComparison.OrdinalIgnoreCase));
-
-            InsertMode insertion;
-            if (idxOmode >= 0 && idxSq >= 0 && idxOmode < idxSq)
-                insertion = InsertMode.BeforeSq;     // Omode vor SQ → App-Alarme dazwischen
-            else if (idxOmode >= 0 && idxSq < 0)
-                insertion = InsertMode.AfterOmode;   // Nur Omode → direkt danach
-            else if (idxOmode < 0 && idxSq >= 0)
-                insertion = InsertMode.BeforeFirstSq; // Nur SQ → davor
-            else
-                insertion = InsertMode.AfterLast;    // Weder Omode noch SQ → ans Ende
 
             // Laufende Indizes
             int rowIndex = 1;        // nächste freie Tabellenzeile (≙ RowId im Textprefix)
@@ -141,294 +126,7 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
                 r.CreateCell(c++).SetCellValue("<No value>"); // Info text
             }
 
-            // App-Alarme (einmalig) ausgeben
-            bool appInserted = false;
-            void EmitAppAlarmsIfNeeded()
-            {
-                if (appInserted) return;
-                if (appAlm.Count == 0) { appInserted = true; return; }
-
-                int appBit = 0;
-                for (int i = 0; i < appAlm.Count; i++)
-                {
-                    var aa = appAlm[i];
-                    string aaName = string.IsNullOrWhiteSpace(aa.Name) ? $"APP_{i:000}" : aa.Name.Trim();
-                    string aaText = !string.IsNullOrWhiteSpace(aa.Comment) ? aa.Comment!.Trim() : aaName;
-
-                    // RowId-Prefix wie im Alt-Tool
-                    string textFinal = $"{rowIndex} {aaText}";
-
-                    WriteRow(
-                        name: aaName,
-                        text: textFinal,
-                        @class: "Errors", // Alt-Tool: Class kommt aus den App-Daten; hier standardmäßig "Errors"
-                        triggerTag: "AppAlarm",
-                        trigBit: appBit,
-                        ackTag: "AppAlarm_Ack",
-                        ackBit: appBit
-                    );
-                    appBit++;
-                }
-
-                appInserted = true;
-            }
-
             static string Safe(string? s) => string.IsNullOrWhiteSpace(s) ? "" : s.Trim();
-
-            // Baut den Alarmtext wie im Alt-Tool – basierend auf DeviceType, Bit, Reserve/Labels und StdText.
-            string ComposeDeviceText(
-                string devType, int bit, bool isReserve, int rowId,
-                string bmk, string nameS1, string nameS2, string stdText)
-            {
-                bmk = Safe(bmk);
-                nameS1 = Safe(nameS1);
-                nameS2 = Safe(nameS2);
-
-                // Einige Typen haben besondere "Normal"-Formate (mit/ohne Unterstrich nach RowId)
-                // sowie spezielle Reserve-Texte und Suffixe.
-                string normalFmtUnderscoreRow = $"_{{0}} {{1}} {{2}} {{3}}"; // z.B. BC/CS/RIT_Weiss
-                string normalFmtDefault = $"{{0}}_{{1}} {{2}} {{3}}"; // Standard (BMK _ NameS1 <space> NameS2)
-                string normalFmtOmode = $"{{0}} {{1}} {{2}}";       // OMODE: BMK <space> NameS1 <space> StdText
-                string normalFmtDenso = $"{{0}} {{1}} {{2}}";       // identisch zu vielen anderen
-
-                string reserve;
-                string text;
-
-                // Utility: B{BMK ohne die ersten 2 Zeichen}{NameS1}.<SUF>
-                string BuildBmkSuffix(string suffix)
-                {
-                    if (string.IsNullOrEmpty(bmk) || bmk.Length < 3) return "";
-                    return $" B{bmk.Substring(2)}{nameS1}{suffix}";
-                }
-
-                switch (devType?.Trim())
-                {
-                    case "Omode":
-                        reserve = $"Omode_Reserve_d.{rowId.ToString().PadLeft(0)}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtOmode, bmk, nameS1, stdText);
-                        break;
-
-                    case "SQ":
-                        reserve = $"SQ_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "2DS":
-                        reserve = $"2_DS Reserver_d.{rowId}";
-                        if (isReserve)
-                        {
-                            text = $"{reserve} {stdText}";
-                        }
-                        else
-                        {
-                            string suffix = bit switch
-                            {
-                                2 => BuildBmkSuffix(".GS"),
-                                3 => BuildBmkSuffix(".AS"),
-                                _ => ""
-                            };
-                            text = string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText) + suffix;
-                        }
-                        break;
-
-                    case "2DSPM":
-                        reserve = $"2_DS Reserver_d.{rowId}";
-                        if (isReserve)
-                        {
-                            text = $"{reserve} {stdText}";
-                        }
-                        else
-                        {
-                            string suffix = bit switch
-                            {
-                                2 => BuildBmkSuffix(".GS"),
-                                3 => BuildBmkSuffix(".AS"),
-                                4 => BuildBmkSuffix(".MS"),
-                                5 => BuildBmkSuffix(".GS"),
-                                6 => BuildBmkSuffix(".AS"),
-                                _ => ""
-                            };
-                            text = string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText) + suffix;
-                        }
-                        break;
-
-                    case "ConvM":
-                        reserve = $"ConvM_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "AI":
-                        reserve = $"AI_Reserve .d_.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "BC":
-                        reserve = $"BC_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtUnderscoreRow, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "CS":
-                        reserve = $"´CS_Reserve_d.{rowId}"; // Achtung: Alt-Tool mit Akzent vor CS
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtUnderscoreRow, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "Cam_XG":
-                        reserve = $"Cam_XG_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "VisionS":
-                        reserve = $"VisionS_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDenso, bmk, nameS1, stdText);
-                        break;
-
-                    case "RFID":
-                        reserve = $"RFID_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "Com_RS":
-                        reserve = $"COm_RS_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "PN":
-                        reserve = $"Reserve PN.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "KeyenceMIC":
-                    case "Keyence_MC":
-                    case "KeyenceMic":
-                        reserve = $"KeyenceMic_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "DO":
-                        reserve = $"DO_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "DI":
-                        reserve = $"DI_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "Denso":
-                        reserve = $"Denso_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDenso, bmk, nameS1, stdText);
-                        break;
-
-                    case "HT_KSV":
-                        reserve = $"HT_KSV_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "APosi":
-                        reserve = $"Aposi_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "M_TC":
-                        reserve = $"Reserve MTC _d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "Load_Dis":
-                    case "Load&Displacem":
-                    case "Load&Displ":
-                        reserve = $"Load&Displacem_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    case "RIT_Weiss":
-                    case "RIT_WEISS":
-                        reserve = $"Rit_Weiss_Reserve_d.{rowId}";
-                        text = isReserve
-                            ? $"{reserve} {stdText}"
-                            : string.Format(normalFmtUnderscoreRow, bmk, nameS1, nameS2, stdText);
-                        break;
-
-                    default:
-                        // Generisches Fallback (wie vormals): RowId + "BMK NameS1 DevType Fehler <bit>"
-                        var parts = new[] { bmk, nameS1, devType }
-                            .Where(s => !string.IsNullOrWhiteSpace(s));
-                        string baseText = string.Join(" ", parts);
-                        if (string.IsNullOrWhiteSpace(baseText)) baseText = devType;
-                        text = $"{baseText} Fehler {bit}";
-                        break;
-                }
-
-                return text;
-            }
-
-            // Liefert (Klasse, Text) aus Rule & Map; Text wird anschließend exakt wie Alt-Tool formatiert.
-            (string Class, string Text) ResolveClassAndText(
-                string devType, int bit, bool isReserve, int rowId,
-                string bmk, string nameS1, string nameS2,
-                IReadOnlyDictionary<(string DevType, int Bit), string>? map)
-            {
-                // Rule lookup (für StdText & Class)
-                string stdText = $"Fehler {bit}";
-                string @class = "Errors";
-
-                if (DeviceAlarmRuleFactory.TryGetRule(devType, out var rule) &&
-                    bit >= 0 && bit < rule.AlarmsPerDevice)
-                {
-                    var tpl = rule.ErrorsTemplate[bit];
-                    if (!string.IsNullOrWhiteSpace(tpl.Text)) stdText = tpl.Text.Trim();
-                    if (!string.IsNullOrWhiteSpace(tpl.Class)) @class = tpl.Class.Trim();
-                }
-
-                // appAlarmTextMap überschreibt den inhaltlichen Text (Klasse bleibt aus Rule)
-                if (map != null && map.TryGetValue((devType, bit), out var mapped) && !string.IsNullOrWhiteSpace(mapped))
-                {
-                    // RowId-Prefix nicht vergessen
-                    return (@class, $"{rowId} {mapped.Trim()}");
-                }
-
-                // Komposition im Alt-Tool-Stil
-                string composed = ComposeDeviceText(devType, bit, isReserve, rowId, bmk, nameS1, nameS2, stdText);
-                return (@class, composed);
-            }
 
             // ------------------------------
             // Hauptschleife über alle Gerätetypen
@@ -439,13 +137,6 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
                 string devType = t.DevName?.Trim() ?? "";
                 int devQty = Math.Max(0, t.DevQty);
                 int almQty = Math.Max(0, t.AlmQty);
-
-                // Vor SQ App-Alarme einfügen (Zwischen-Fall)
-                if (!appInserted && insertion == InsertMode.BeforeSq &&
-                    string.Equals(devType, "SQ", StringComparison.OrdinalIgnoreCase))
-                {
-                    EmitAppAlarmsIfNeeded();
-                }
 
                 // Gerätespezifische Alarme ausgeben
                 if (!string.IsNullOrEmpty(devType) && devQty > 0 && almQty > 0)
@@ -459,6 +150,7 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
 
                     for (int inst = 1; inst <= devQty; inst++)
                     {
+                        currentDeviceIndex1Based = inst;   // <-- wichtig für Alm16
                         int startBit = globalBitIndex;
 
                         // Instanzlabels (BMK/NameS1/NameS2)
@@ -482,7 +174,7 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
 
                             // Text & Klasse bestimmen (Rule + Alt-Tool-Format)
                             var (cls, text) = ResolveClassAndText(
-                                devType, bit, isReserve, rowIndex,
+                                devType, name, bit, isReserve, rowIndex,
                                 bmk, nameS1, nameS2,
                                 appAlarmTextMap
                             );
@@ -502,28 +194,6 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
                         globalBitIndex += bitsPerDevice;
                     }
                 }
-
-                // Nach Omode einfügen (wenn SQ fehlt)
-                if (!appInserted && insertion == InsertMode.AfterOmode &&
-                    string.Equals(devType, "Omode", StringComparison.OrdinalIgnoreCase))
-                {
-                    EmitAppAlarmsIfNeeded();
-                }
-            }
-
-            // Falls noch nicht eingefügt:
-            if (!appInserted)
-            {
-                if (insertion == InsertMode.BeforeFirstSq)
-                {
-                    // Nur SQ vorhanden → davor einfügen
-                    EmitAppAlarmsIfNeeded();
-                }
-                else
-                {
-                    // Keiner vorhanden → ans Ende
-                    EmitAppAlarmsIfNeeded();
-                }
             }
 
             // Spaltenbreite optimieren (optional)
@@ -537,6 +207,300 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
 
             using var fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None);
             wb.Write(fs);
+
+            // Liefert (Klasse, Text) aus Rule & Map; Text wird anschließend exakt wie Alt-Tool formatiert.
+            (string Class, string Text) ResolveClassAndText(
+                string devType, string name, int bit, bool isReserve, int rowId,
+                string bmk, string nameS1, string nameS2,
+                IReadOnlyDictionary<(string DevType, int Bit), string>? map)
+            {
+                // Rule lookup (für StdText & Class)
+                string stdText = $"Alarm {bit}";
+                string @class = "Errors";
+
+                if (DeviceAlarmRuleFactory.TryGetRule(devType, out var rule) &&
+                    bit >= 0 && bit < rule.AlarmsPerDevice)
+                {
+                    var tpl = rule.ErrorsTemplate[bit];
+                    if (!string.IsNullOrWhiteSpace(tpl.Text)) stdText = tpl.Text.Trim();
+                    if (!string.IsNullOrWhiteSpace(tpl.Class)) @class = tpl.Class.Trim();
+                }
+
+                // appAlarmTextMap überschreibt den inhaltlichen Text (Klasse bleibt aus Rule)
+                if (map != null && map.TryGetValue((devType, bit), out var mapped) && !string.IsNullOrWhiteSpace(mapped))
+                {
+                    // RowId-Prefix nicht vergessen
+                    return (@class, $"{rowId} {mapped.Trim()}");
+                }
+
+                // Komposition im Alt-Tool-Stil
+                string composed = ComposeDeviceText(devType, name, bit, isReserve, rowId, bmk, nameS1, nameS2, stdText);
+
+                // Baut den Alarmtext wie im Alt-Tool – basierend auf DeviceType, Bit, Reserve/Labels und StdText.
+                string ComposeDeviceText(
+                    string devType, string name, int bit, bool isReserve, int rowId,
+                    string bmk, string nameS1, string nameS2, string stdText)
+                {
+                    bmk = Safe(bmk);
+                    nameS1 = Safe(nameS1);
+                    nameS2 = Safe(nameS2);
+
+
+                    // Einige Typen haben besondere "Normal"-Formate (mit/ohne Unterstrich nach RowId)
+                    // sowie spezielle Reserve-Texte und Suffixe.
+                    string normalFmtUnderscoreRow = $"_{{0}} {{1}} {{2}} {{3}}"; // z.B. BC/CS/RIT_Weiss
+                    string normalFmtDefault = $"{{0}}_{{1}} {{2}} {{3}}"; // Standard (BMK _ NameS1 <space> NameS2)
+                    string normalFmtOmode = $"{{0}} {{1}} {{2}}";       // OMODE: BMK <space> NameS1 <space> StdText
+                    string normalFmtDenso = $"{{0}} {{1}} {{2}}";       // identisch zu vielen anderen
+
+                    string reserve;
+                    string text;
+
+                    // Utility: B{BMK ohne die ersten 2 Zeichen}{NameS1}.<SUF>
+                    string BuildBmkSuffix(string suffix)
+                    {
+                        if (string.IsNullOrEmpty(bmk) || bmk.Length < 3) return "";
+                        return $" B{bmk.Substring(2)}{nameS1}{suffix}";
+                    }
+
+                    var devKey = (devType ?? string.Empty)
+                        .Trim()
+                        .TrimEnd('_', ' ')
+                        .ToUpperInvariant();
+
+                    switch (devKey)
+                    {
+                        case "OMODE":
+                            reserve = $"Omode_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtOmode, bmk, nameS1, stdText);
+                            break;
+
+                        case "ALM16":
+                            {
+                                reserve = $"Alm16_Reserve_d.{rowId}";
+
+                                // AppAlarm-Zeile wie im Alt-Tool:
+                                //   Index = (Instanz-1)*16 + Bit
+                                int appIdx = (currentDeviceIndex1Based - 1) * 16 + bit;
+
+                                // Safes Lesen aus der bereits vorhandenen App-Alarm-Liste:
+                                string appText = "";
+                                if (appIdx >= 0 && appIdx < appAlm.Count)
+                                {
+                                    var aa = appAlm[appIdx];
+                                    // bevorzugt "Name" + „Alarmtext“-Spalte, sonst Name als Fallback
+                                    appText = Safe(!string.IsNullOrWhiteSpace(aa.AlarmText) ? $"{bmk}: {aa.AlarmText}" : $"{name} !Alarmtext nicht definiert!" );
+                                }
+
+                                if (string.IsNullOrEmpty(appText))
+                                {
+                                    // Fallback identisch zum Alt-Tool: Reserve- oder Standardtext
+                                    text = isReserve
+                                        ? $"{reserve} {stdText}"
+                                        : $"{bmk} {stdText}";
+                                }
+                                else
+                                {
+                                    // Alt-Tool-Prinzip: RowId + " " + Text aus AppAlarm (_AA)
+                                    // Die RowId wird jetzt weggelassen, da im TIA-Alarmfenster als eigene Spalte vorhanden
+                                    text = $"{appText}";
+                                }
+                                break;
+                            }
+
+                        case "SQ":
+                            reserve = $"SQ_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "2DS":
+                            reserve = $"2_DS Reserver_d.{rowId}";
+                            if (isReserve)
+                            {
+                                text = $"{reserve} {stdText}";
+                            }
+                            else
+                            {
+                                string suffix = bit switch
+                                {
+                                    2 => BuildBmkSuffix(".GS"),
+                                    3 => BuildBmkSuffix(".AS"),
+                                    _ => ""
+                                };
+                                text = string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText) + suffix;
+                            }
+                            break;
+
+                        case "2DSPM":
+                            reserve = $"2_DS Reserver_d.{rowId}";
+                            if (isReserve)
+                            {
+                                text = $"{reserve} {stdText}";
+                            }
+                            else
+                            {
+                                string suffix = bit switch
+                                {
+                                    2 => BuildBmkSuffix(".GS"),
+                                    3 => BuildBmkSuffix(".AS"),
+                                    4 => BuildBmkSuffix(".MS"),
+                                    5 => BuildBmkSuffix(".GS"),
+                                    6 => BuildBmkSuffix(".AS"),
+                                    _ => ""
+                                };
+                                text = string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText) + suffix;
+                            }
+                            break;
+
+                        case "CONVM":
+                            reserve = $"ConvM_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "AI":
+                            reserve = $"AI_Reserve .d_.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "BC":
+                            reserve = $"BC_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtUnderscoreRow, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "CS":
+                            reserve = $"´CS_Reserve_d.{rowId}"; // Achtung: Alt-Tool mit Akzent vor CS
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtUnderscoreRow, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "CAM_XG":
+                            reserve = $"Cam_XG_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "VISIONS":
+                            reserve = $"VisionS_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDenso, bmk, nameS1, stdText);
+                            break;
+
+                        case "RFID":
+                            reserve = $"RFID_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "COM_RS":
+                            reserve = $"COm_RS_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "PN":
+                            reserve = $"Reserve PN.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "KEYENCEMIC":
+                        case "KEYENCE_MC":
+                            reserve = $"KeyenceMic_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "DO":
+                            reserve = $"DO_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "DI":
+                            reserve = $"DI_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "DENSO":
+                            reserve = $"Denso_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDenso, bmk, nameS1, stdText);
+                            break;
+
+                        case "HT_KSV":
+                            reserve = $"HT_KSV_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "APOSI":
+                            reserve = $"Aposi_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "M_TC":
+                            reserve = $"Reserve MTC _d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "LOAD_DIS":
+                        case "Load&LOAD&DISPLACEM":
+                        case "LOAD&DISPL":
+                            reserve = $"Load&Displacem_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtDefault, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        case "RIT_WEISS":
+                            reserve = $"Rit_Weiss_Reserve_d.{rowId}";
+                            text = isReserve
+                                ? $"{reserve} {stdText}"
+                                : string.Format(normalFmtUnderscoreRow, bmk, nameS1, nameS2, stdText);
+                            break;
+
+                        default:
+                            // Generisches Fallback (wie vormals): RowId + "BMK NameS1 DevType Fehler <bit>"
+                            var parts = new[] { bmk, nameS1, devType }
+                                .Where(s => !string.IsNullOrWhiteSpace(s));
+                            string baseText = string.Join(" ", parts);
+                            if (string.IsNullOrWhiteSpace(baseText)) baseText = devType;
+                            text = $"{baseText} Fehler {bit}";
+                            break;
+                    }
+
+                    return text;
+                }
+
+                return (@class, composed);
+            }
+
         }
     }
 }

@@ -217,31 +217,6 @@ namespace SIM_TIA_DeviceAlarmgenerator.ViewModel
             }
         }
 
-        /// <summary>
-        /// Liest die ausgewählte Excel-Datei ein und baut das <see cref="AlarmDb"/>-Modell.
-        /// </summary>
-        private void ReadData()
-        {
-            try
-            {
-                SetStatus("Excel lesen gestartet");
-                if (string.IsNullOrWhiteSpace(FilePath))
-                {
-                    SetStatus("Kein Datei-Pfad gesetzt.");
-                    return;
-                }
-
-                // Excel → Model
-                var model = _excelReader.BuildFromExcel(FilePath);
-                AlarmDb = model;
-
-                SetStatus($"Excel gelesen: DeviceTypeCount={model.DeviceSettingRows}, DevicesMax={model.DevicesMax}, ErrNoBufferMax={model.ErrNoBufferMax}");
-            }
-            catch (Exception ex)
-            {
-                SetStatus($"Fehler beim Excel-Einlesen: {ex.Message}");
-            }
-        }
 
         /// <summary>
         /// Liest Mengen aus „StA-Cfg“ und erzeugt Alarme gemäß der erkannten <see cref="IDeviceAlarmRule"/>-Regeln.
@@ -290,20 +265,29 @@ namespace SIM_TIA_DeviceAlarmgenerator.ViewModel
         }
 
         /// <summary>
-        /// Liefert den Wert an der angegebenen Position aus einer zweidimensionalen int-Matrix.
+        /// Liest die ausgewählte Excel-Datei ein und baut das <see cref="AlarmDb"/>-Modell.
         /// </summary>
-        /// <param name="matrix">Die zweidimensionale Matrix (<c>int[,]</c>), aus der gelesen werden soll.</param>
-        /// <param name="r">Der Zeilenindex (0-basiert).</param>
-        /// <param name="c">Der Spaltenindex (0-basiert).</param>
-        /// <returns>
-        /// Den Wert der Matrixzelle an <paramref name="r"/> und <paramref name="c"/>.
-        /// Falls der Index außerhalb des gültigen Bereichs liegt, wird <c>0</c> zurückgegeben.
-        /// </returns>
-        private static int SafeGet(int[,] matrix, int r, int c)
+        private void ReadData()
         {
-            if (r < 0 || c < 0) return 0;
-            if (r >= matrix.GetLength(0) || c >= matrix.GetLength(1)) return 0;
-            return matrix[r, c];
+            try
+            {
+                SetStatus("Excel lesen gestartet");
+                if (string.IsNullOrWhiteSpace(FilePath))
+                {
+                    SetStatus("Kein Datei-Pfad gesetzt.");
+                    return;
+                }
+
+                // Excel → Model
+                var model = _excelReader.BuildFromExcel(FilePath);
+                AlarmDb = model;
+
+                SetStatus($"Excel gelesen: DeviceTypeCount={model.DeviceSettingRows}, DevicesMax={model.DevicesMax}, ErrNoBufferMax={model.ErrNoBufferMax}");
+            }
+            catch (Exception ex)
+            {
+                SetStatus($"Fehler beim Excel-Einlesen: {ex.Message}");
+            }
         }
 
         #region Log & Status

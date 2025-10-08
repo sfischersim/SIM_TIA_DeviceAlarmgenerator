@@ -48,6 +48,136 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
     }
 
     // -----------------------------
+    // ALM16
+    // -----------------------------
+    /// <summary>
+    /// Regelwerk für „Alm16“. Die Meldungstexte (und optional Klassen) werden
+    /// aus dem Sheet „AppAlarm (_AA)“ bezogen.
+    /// 
+    /// Zuordnung (wie im Alt-Tool):
+    ///   AppRow = startRow (Default 2) + (DeviceIndex1Based - 1) * 16 + AlarmIndex0Based
+    ///   Text   = (RowId + " " + appSheet[AppRow, commentCol])
+    ///   Klasse = aus appSheet[AppRow, classCol] (Code "3" -> "Warnings", sonst "Errors"),
+    ///            für ErrorsTemplate initial nur für Bit 0..15 (Default "Errors").
+    /// </summary>
+    public sealed class Alm16Rule : IDeviceAlarmRule
+    {
+        /// <inheritdoc />
+        public string DeviceTypeName => "Alm16";
+
+        /// <inheritdoc />
+        public int AlarmsPerDevice => 16;
+
+        /// <inheritdoc />
+        public (string Text, string Class)[] ErrorsTemplate { get; }
+
+        // --- AppAlarm-Sheet Bezug ---
+        private readonly string[,] _appSheet;
+        private readonly int _startRow;     // Default 2 (0-basiert im Code, fachlich „ab Zeile 3“)
+        private readonly int _nameCol;      // Default 0
+        private readonly int _classCol;     // Default 3  (Alt-Tool: "3" => Warnings)
+        private readonly int _commentCol;   // Default 7
+
+        /// <summary>
+        /// Erstellt die Alm16-Rule, die Texte/Klasse aus dem AppAlarm-Sheet bezieht.
+        /// </summary>
+        /// <param name="appSheet">Matrix des Sheets „AppAlarm (_AA)“ als [row, col].</param>
+        /// <param name="startRow">Erste Datenzeile (0-basiert). Fachlich: i. d. R. 2 → ab Excel-Zeile 3.</param>
+        /// <param name="nameCol">Spalte für den Namen/Key (Default 0).</param>
+        /// <param name="classCol">Spalte für Klassen-/Severity-Code (Default 3; "3" → "Warnings").</param>
+        /// <param name="commentCol">Spalte für Kommentar/Meldungstext (Default 7).</param>
+        public Alm16Rule(
+            string[,] appSheet,
+            int startRow = 2,
+            int nameCol = 0,
+            int classCol = 3,
+            int commentCol = 7)
+        {
+            _appSheet = appSheet ?? throw new ArgumentNullException(nameof(appSheet));
+            _startRow = startRow;
+            _nameCol = nameCol;
+            _classCol = classCol;
+            _commentCol = commentCol;
+
+            // ErrorsTemplate initial für Bits 0..15 aus den ersten 16 App-Zeilen (falls vorhanden) ableiten.
+            // Ansonsten "Errors". Der Text im Template ist hier nur informativ; der finale Zeilentext
+            // wird in ComposeMessage(...) pro Instanz/Bit aus dem passenden AppRow erzeugt.
+            ErrorsTemplate = new (string Text, string Class)[AlarmsPerDevice];
+            for (int bit = 0; bit < AlarmsPerDevice; bit++)
+            {
+                var (txt, cls) = TryReadFromApp(bit, deviceIndex1Based: 1, rowId: 0, forTemplate: true);
+                if (string.IsNullOrWhiteSpace(cls)) cls = "Errors";
+                if (string.IsNullOrWhiteSpace(txt)) txt = $"Fehler {bit}";
+                ErrorsTemplate[bit] = (txt, cls);
+            }
+        }
+
+        /// <inheritdoc />
+        public string ComposeMessage(DeviceMessageContext ctx)
+        {
+            // 1) Text-Override aus AppAlarm (_AA) holen – OHNE RowId-Prefix
+            var (overrideStdText, _) =
+                TryReadFromApp(ctx.AlarmIndex0Based, ctx.DeviceIndex1Based, rowId: 0, forTemplate: true);
+
+            // 2) Fallback auf das Template (ErrorsTemplate) wenn im Sheet nichts steht
+            var (tplText, _) = ErrorsTemplate[ctx.AlarmIndex0Based];
+            string stdText = string.IsNullOrWhiteSpace(overrideStdText) ? tplText : overrideStdText;
+
+            // 3) Finale Meldung exakt wie bei Omode/SQ etc. zusammensetzen
+            return GenericDeviceAlarmBuilder.ComposeDefaultMessage(ctx, DeviceTypeName, stdText);
+        }
+
+        /// <summary>
+        /// Liest Name/Text/Klasse aus dem AppAlarm-Sheet für die gegebene (Instanz, Bit)-Position.
+        /// </summary>
+        /// <param name="bit">0..15</param>
+        /// <param name="deviceIndex1Based">Instanz (1-basiert)</param>
+        /// <param name="rowId">Globale RowId (für Prefix); 0 = ohne Prefix (Template)</param>
+        /// <param name="forTemplate">Wenn true, wird nur ein generischer Zeilentext ohne RowId gebildet (für ErrorsTemplate).</param>
+        private (string Text, string Class) TryReadFromApp(int bit, int deviceIndex1Based, int rowId, bool forTemplate)
+        {
+            // AppRow wie im Alt-Tool:
+            //   startRow + (Instanz-1)*16 + Bit
+            int appRow = _startRow + (deviceIndex1Based - 1) * AlarmsPerDevice + bit;
+
+            int rows = _appSheet.GetLength(0);
+            int cols = _appSheet.GetLength(1);
+            if (appRow < 0 || appRow >= rows) return (string.Empty, string.Empty);
+
+            string Safe(int r, int c)
+            {
+                if (c < 0 || c >= cols) return "";
+                var v = _appSheet[r, c];
+                return string.IsNullOrWhiteSpace(v) ? "" : v.Trim();
+            }
+
+            string name = Safe(appRow, _nameCol);
+            string comment = Safe(appRow, _commentCol);
+            string clsCode = Safe(appRow, _classCol);
+
+            // Klassenmapping wie im Alt-Tool: Code "3" ⇒ "Warnings", sonst "Errors".
+            string @class = (clsCode == "3") ? "Warnings" : "Errors";
+
+            // Text: im Template-Fall bauen wir einen neutralen Text ohne RowId auf (nur für Preview im Template).
+            // Im realen ComposeMessage-Fall prefixen wir die RowId (wie im Alt-Tool).
+            string textForTemplate = !string.IsNullOrWhiteSpace(comment) ? comment
+                                : (!string.IsNullOrWhiteSpace(name) ? name : $"Fehler {bit}");
+
+            if (forTemplate)
+                return (textForTemplate, @class);
+
+            string textFinal = !string.IsNullOrWhiteSpace(comment) ? comment
+                             : (!string.IsNullOrWhiteSpace(name) ? name : $"Fehler {bit}");
+
+            // RowId-Prefix wie im Alt-Tool (z. B. "123 Mein Text")
+            if (rowId > 0)
+                textFinal = $"{rowId} {textFinal}";
+
+            return (textFinal, @class);
+        }
+    }
+
+    // -----------------------------
     // SQ
     // -----------------------------
     /// <summary>

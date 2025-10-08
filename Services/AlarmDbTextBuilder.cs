@@ -56,7 +56,7 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
                 {
                     var name = string.IsNullOrWhiteSpace(bit.Name) ? "Unnamed" : bit.Name.Trim();
                     sb.Append("         ").Append(name).Append(" : Bool;");
-                    if (!string.IsNullOrWhiteSpace(bit.Comment)) sb.Append("   // ").Append(bit.Comment.Trim());
+                    if (!string.IsNullOrWhiteSpace(bit.AlarmText)) sb.Append("   // ").Append(bit.AlarmText.Trim());
                     sb.Append(NL);
                 }
             }

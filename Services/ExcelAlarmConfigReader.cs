@@ -41,6 +41,12 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
         /// <summary>Spaltenindex „AlmQty“ im Sheet <c>StA-Cfg</c> (0-basiert).</summary>
         private const int COL_ALMQTY = 3;    // AlmQty
 
+        // Spalten & Header definieren (0-basiert)
+        private const int APP_HEADER_ROWS = 2;  // 2 Kopfzeilen
+        private const int APP_COL_NAME = 2;  // Name/Key
+        private const int APP_COL_CLASS = 3;  // "3" => Warnings, sonst Errors
+        private const int APP_COL_TEXT = 7;  // Kommentar/Meldungstext
+
         /// <summary>
         /// Liest die Alarmkonfigurationsdaten aus einer Excel-Datei ein
         /// und baut daraus ein vollständiges <see cref="AlarmDbModel"/>.
@@ -109,9 +115,8 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
 
                 var devName = GetString(row.GetCell(COL_DEVNAME)).Trim();
 
-                // Wenn Zelle mit Device-Bezeichnung leer ist oder es sich um den Alm16 handelt -> mit nächster Zeile fortfahren
-                if (string.IsNullOrWhiteSpace(devName) ||
-                    devName.Equals("ALM16", StringComparison.OrdinalIgnoreCase)) 
+                // Wenn Zelle mit Device-Bezeichnung leer ist -> mit nächster Zeile fortfahren
+                if (string.IsNullOrWhiteSpace(devName)) 
                     continue;
 
                 logicalIdx++;
@@ -207,24 +212,24 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
             // Standard-Alarmbits (Systemalarme)
             m.StandardAlarms.AddRange(new[]
             {
-                new AlarmBit { Name="HMI_AL_DevTypOOR", Comment="collectAlarm: Fehlender oder falscher DevTyp beim Aufruf verwendet" },
-                new AlarmBit { Name="HMI_AL_QtyBit", Comment="collectAlarm: Anzahl Fehlerbits sind außerhalb parametrierten Bereich, DevTyp deaktiviert" },
-                new AlarmBit { Name="HMI_AL_NoInit", Comment="collectAlarm: HMI_Alarme Init muss durchgeführt werden" },
-                new AlarmBit { Name="HMI_AL_DevTypCfg", Comment="collectAlarm: Fehler in Device Konfiguration. Devicetyp #" },
-                new AlarmBit { Name="HMI_AL_DevIdx", Comment="collectAlarm: Device Index ist außerhalb parametrierten Bereichs" },
-                new AlarmBit { Name="HMI_AL_devArrMax", Comment="collectAlarm: aktueller Device Index außerhalb gültigen Bereichs" },
-                new AlarmBit { Name="HMI_AL_Fu", Comment="collectAlarm: falscher Funktionsaufruf" },
-                new AlarmBit { Name="PCS_Err", Comment="PCS: Allgemeiner Fehler in Kommunikation" },
-                new AlarmBit { Name="PCS_Err_TA", Comment="PCS: Telegrammfehler Nr #, Transaktionsüberwachung" },
-                new AlarmBit { Name="PCS_TO_Cycle", Comment="PCS: Neue Daten bevor letzte Übertragung beendet. Laufzeit-Fehler Kommunikation" },
-                new AlarmBit { Name="PCS_ErrSetData", Comment="PCS: Fehler in SetData" },
-                new AlarmBit { Name="PCS_ErrGetData", Comment="PCS: Fehler in GetData" },
-                new AlarmBit { Name="P_ArrStartIdx", Comment="P oder P_Adv Start-Index falsch" },
-                new AlarmBit { Name="Res15", Comment="Reserviert (Platzhalter)" },
-                new AlarmBit { Name="PCS_ErrRcvRcp", Comment="PCS: Fehler beim Laden einer Rezeptur" },
-                new AlarmBit { Name="NoJobData", Comment="PCS: keine gültigen Auftragsdaten" },
-                new AlarmBit { Name="NoRcpData", Comment="PCS: keine gültigen Rezepturdaten" },
-                new AlarmBit { Name="PD_Ctrl_Error", Comment="PD: Sammelfehler (Teiledatenmanager)" }
+                new AlarmBit { Name="HMI_AL_DevTypOOR", AlarmText="collectAlarm: Fehlender oder falscher DevTyp beim Aufruf verwendet" },
+                new AlarmBit { Name="HMI_AL_QtyBit", AlarmText="collectAlarm: Anzahl Fehlerbits sind außerhalb parametrierten Bereich, DevTyp deaktiviert" },
+                new AlarmBit { Name="HMI_AL_NoInit", AlarmText="collectAlarm: HMI_Alarme Init muss durchgeführt werden" },
+                new AlarmBit { Name="HMI_AL_DevTypCfg", AlarmText="collectAlarm: Fehler in Device Konfiguration. Devicetyp #" },
+                new AlarmBit { Name="HMI_AL_DevIdx", AlarmText="collectAlarm: Device Index ist außerhalb parametrierten Bereichs" },
+                new AlarmBit { Name="HMI_AL_devArrMax", AlarmText="collectAlarm: aktueller Device Index außerhalb gültigen Bereichs" },
+                new AlarmBit { Name="HMI_AL_Fu", AlarmText="collectAlarm: falscher Funktionsaufruf" },
+                new AlarmBit { Name="PCS_Err", AlarmText="PCS: Allgemeiner Fehler in Kommunikation" },
+                new AlarmBit { Name="PCS_Err_TA", AlarmText="PCS: Telegrammfehler Nr #, Transaktionsüberwachung" },
+                new AlarmBit { Name="PCS_TO_Cycle", AlarmText="PCS: Neue Daten bevor letzte Übertragung beendet. Laufzeit-Fehler Kommunikation" },
+                new AlarmBit { Name="PCS_ErrSetData", AlarmText="PCS: Fehler in SetData" },
+                new AlarmBit { Name="PCS_ErrGetData", AlarmText="PCS: Fehler in GetData" },
+                new AlarmBit { Name="P_ArrStartIdx", AlarmText="P oder P_Adv Start-Index falsch" },
+                new AlarmBit { Name="Res15", AlarmText="Reserviert (Platzhalter)" },
+                new AlarmBit { Name="PCS_ErrRcvRcp", AlarmText="PCS: Fehler beim Laden einer Rezeptur" },
+                new AlarmBit { Name="NoJobData", AlarmText="PCS: keine gültigen Auftragsdaten" },
+                new AlarmBit { Name="NoRcpData", AlarmText="PCS: keine gültigen Rezepturdaten" },
+                new AlarmBit { Name="PD_Ctrl_Error", AlarmText="PD: Sammelfehler (Teiledatenmanager)" }
             });
 
             // Optionale Applikationsalarme aus „AppAlarm (_AA)“
@@ -233,19 +238,26 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
                 var sh = wb.GetSheet(SHEET_APPALARM);
                 if (sh != null)
                 {
-                    for (int r = 1; r <= sh.LastRowNum; r++)
+                    for (int r = APP_HEADER_ROWS; r <= sh.LastRowNum; r++)
                     {
                         var row = sh.GetRow(r);
                         if (row == null) continue;
 
-                        string name = (row.GetCell(0)?.ToString() ?? "").Trim();
-                        string comment = (row.GetCell(1)?.ToString() ?? "").Trim();
-                        if (string.IsNullOrEmpty(name)) continue;
+                        string name = GetString(row.GetCell(APP_COL_NAME)).Trim();
+                        string comment = GetString(row.GetCell(APP_COL_TEXT)).Trim();
+                        string clsCode = GetString(row.GetCell(APP_COL_CLASS)).Trim();
+
+                        // ganz leere Zeilen überspringen
+                        if (string.IsNullOrEmpty(name) && string.IsNullOrEmpty(comment)) continue;
+
+                        // Klassenmapping wie im Alt-Tool
+                        string @class = (clsCode == "3") ? "Warnings" : "Errors";
 
                         m.ApplicationAlarms.Add(new AlarmBit
                         {
                             Name = name,
-                            Comment = comment
+                            AlarmText = comment,
+                            Class = @class   
                         });
                     }
                 }

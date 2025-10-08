@@ -28,6 +28,8 @@ namespace SIM_TIA_DeviceAlarmgenerator.Model
         /// <remarks>
         /// Kann <see langword="null"/> sein, wenn kein Kommentar angegeben wurde.
         /// </remarks>
-        public string? Comment { get; set; }
+        public string? AlarmText { get; set; }
+
+        public string? Class { get; set; }
     }
 }
