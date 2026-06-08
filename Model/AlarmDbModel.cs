@@ -86,7 +86,7 @@ namespace SIM_TIA_DeviceAlarmgenerator.Model
 
         /// <summary>
         /// Geräteeinstellungen als 2D-Array (UInt), z. B. zur Parametrierung der Geräte.
-        /// </summary>
+        /// </summary>  
         public uint[,] DeviceSetting { get; set; } = new uint[1, 3];
 
         // Max-Werte (werden im BEGIN geschrieben)
@@ -138,5 +138,16 @@ namespace SIM_TIA_DeviceAlarmgenerator.Model
         /// </remarks>
         public Dictionary<string, Dictionary<int, DeviceInstanceLabel>> DeviceInstanceLabels { get; set; }
             = new(StringComparer.OrdinalIgnoreCase);
+
+        // ---- PREVIEW-PAYLOADS -----------------
+
+        /// <summary>Rohdaten des Sheets „Devices“ als Matrix (nur für UI-Preview).</summary>
+        public string[,]? DevicesMatrix { get; set; }
+
+        /// <summary>Rohdaten des Sheets „StA-Cfg“ als Text-Matrix (nur für UI-Preview).</summary>
+        public string[,]? StaCfgTextMatrix { get; set; }
+
+        /// <summary>Rohdaten des Sheets „AppAlarm (_AA)“ als Matrix (nur für UI-Preview).</summary>
+        public string[,]? AppAlarmMatrix { get; set; }
     }
 }

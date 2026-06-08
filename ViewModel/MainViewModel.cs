@@ -109,6 +109,9 @@ namespace SIM_TIA_DeviceAlarmgenerator.ViewModel
         [ObservableProperty]
         private AlarmDbModel alarmDb = new AlarmDbModel();
 
+        [ObservableProperty]
+        public AlarmDbPreviewViewModel previewVm = new AlarmDbPreviewViewModel();
+
         /// <summary>
         /// Öffnet einen Dateiauswahldialog und liest die gewählte Projekt-Excel ein.
         /// </summary>
@@ -278,11 +281,25 @@ namespace SIM_TIA_DeviceAlarmgenerator.ViewModel
                     return;
                 }
 
-                // Excel → Model
+                // 1) Vollmodell aufbauen
                 var model = _excelReader.BuildFromExcel(FilePath);
                 AlarmDb = model;
 
+                // 2) Previews holen
+                DevicesPreview = ToDataView(model.DevicesMatrix);
+                NumbersPreview = ToDataView(model.StaCfgTextMatrix);
+                AppAlarmPreview = ToDataView(model.AppAlarmMatrix);
+
+                // 3) kurze Statistiken
+                if (DevicesPreview != null) SetStatus($"Devices: {DevicesPreview.Count} Zeilen");
+                if (NumbersPreview != null) SetStatus($"StA-Cfg: {NumbersPreview.Count} Zeilen");
+                if (AppAlarmPreview != null) SetStatus($"AppAlarm (_AA): {AppAlarmPreview.Count} Zeilen");
+
+                // 4) Zusammenfassung aus deinem Model (existiert bei dir bereits)
                 SetStatus($"Excel gelesen: DeviceTypeCount={model.DeviceSettingRows}, DevicesMax={model.DevicesMax}, ErrNoBufferMax={model.ErrNoBufferMax}");
+
+                // 5) Preview erzeugen
+                PreviewVm = new AlarmDbPreviewViewModel(model);
             }
             catch (Exception ex)
             {
@@ -339,6 +356,63 @@ namespace SIM_TIA_DeviceAlarmgenerator.ViewModel
             SetStatus("Log geleert");
         }
 
-        #endregion 
+        #endregion
+
+        #region Helper
+        private static DataView? ToDataView(string[,]? matrix)
+        {
+            if (matrix is null) return null;
+            var rows = matrix.GetLength(0);
+            var cols = matrix.GetLength(1);
+
+            var table = new DataTable();
+            for (int c = 0; c < cols; c++)
+                table.Columns.Add($"C{c + 1}", typeof(string));
+
+            for (int r = 0; r < rows; r++)
+            {
+                var dr = table.NewRow();
+                for (int c = 0; c < cols; c++)
+                    dr[c] = matrix[r, c];
+                table.Rows.Add(dr);
+            }
+            return table.DefaultView;
+        }
+
+        private static DataView? ToDataView(DataTable? table)
+        {
+            return table?.DefaultView;
+        }
+
+        private static DataView? ToDataView<T>(IEnumerable<T>? rows)
+        {
+            if (rows is null) return null;
+
+            var table = new DataTable(typeof(T).Name);
+
+            // Spalten aus öffentlichen Properties ableiten
+            var props = typeof(T).GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+            foreach (var p in props)
+            {
+                var colType = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+                table.Columns.Add(p.Name, colType);
+            }
+
+            // Daten füllen
+            foreach (var item in rows)
+            {
+                var dr = table.NewRow();
+                foreach (var p in props)
+                {
+                    var value = p.GetValue(item, null);
+                    dr[p.Name] = value ?? DBNull.Value;
+                }
+                table.Rows.Add(dr);
+            }
+
+            return table.DefaultView;
+        }
+
+        #endregion
     }
 }

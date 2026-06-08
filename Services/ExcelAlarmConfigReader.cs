@@ -32,6 +32,9 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
         /// <summary>0-basierter Index der englischen Headerzeile im Sheet <c>StA-Cfg</c>.</summary>
         private const int STA_HEADER_ROW = 1; // englische Headerzeile
 
+        /// <summary>Spaltenindex „Idx“ im Sheet <c>StA-Cfg</c> (0-basiert).</summary>
+        private const int COL_IDX = 0;        // Idx
+
         /// <summary>Spaltenindex „DevName“ im Sheet <c>StA-Cfg</c> (0-basiert).</summary>
         private const int COL_DEVNAME = 1;    // DevName
 
@@ -49,122 +52,137 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
 
         /// <summary>
         /// Liest die Alarmkonfigurationsdaten aus einer Excel-Datei ein
-        /// und baut daraus ein vollständiges <see cref="AlarmDbModel"/>.
+        /// und baut daraus ein vollständiges <see cref="AlarmDbModel"/>-Objekt.
         /// </summary>
-        /// <param name="filePath">Vollständiger Pfad zur Excel-Datei.</param>
+        /// <param name="filePath">
+        /// Vollständiger Pfad zur Excel-Datei (.xlsx, .xls oder .xlsm).
+        /// </param>
         /// <returns>
-        /// Ein initialisiertes <see cref="AlarmDbModel"/> mit Standard- und Applikationsalarmen,
-        /// gefüllter <c>DeviceSetting</c>-Matrix, <c>DeviceTypes</c>, berechnetem <c>DevicesWordCount</c>
-        /// und optionalen Instanzlabels aus dem Sheet <c>Devices</c>.
+        /// Ein initialisiertes <see cref="AlarmDbModel"/>, das alle
+        /// erforderlichen Header- und Gerätekonfigurationsinformationen enthält.
+        /// Zusätzlich werden die Inhalte der relevanten Sheets als
+        /// 2-dimensionale Text-Matrizen (<c>DevicesMatrix</c>,
+        /// <c>StaCfgTextMatrix</c> und <c>AppAlarmMatrix</c>) für die UI-Preview bereitgestellt.
         /// </returns>
         /// <exception cref="InvalidOperationException">
-        /// Das erwartete Sheet <c>StA-Cfg</c> wurde nicht gefunden.
+        /// Wird ausgelöst, wenn das erwartete Sheet <c>StA-Cfg</c> in der Excel-Datei
+        /// nicht gefunden wurde.
         /// </exception>
         /// <exception cref="NotSupportedException">
-        /// Die Dateierweiterung wird nicht unterstützt.
+        /// Wird ausgelöst, wenn die Dateierweiterung nicht unterstützt wird.
         /// </exception>
         /// <remarks>
-        /// - Excel wird im Sharing-Modus geöffnet (<see cref="FileShare.ReadWrite"/>).<br/>
-        /// - Bei ungültigen/fehlenden Zahlenwerten werden 0 bzw. sinnvolle Minimalwerte verwendet.<br/>
-        /// - <c>DevicesWordCount</c> basiert auf <c>sum(ceil(AlmQty/16) * DevQty)</c>, mindestens 1.
+        /// <list type="bullet">
+        /// <item>
+        /// Die Excel-Datei wird im <see cref="FileShare.ReadWrite"/>-Modus geöffnet,
+        /// sodass sie parallel in Excel geöffnet bleiben kann.
+        /// </item>
+        /// <item>
+        /// Es werden die Sheets <c>Devices</c>, <c>StA-Cfg</c> und
+        /// <c>AppAlarm (_AA)</c> (bzw. deren Varianten) gesucht. 
+        /// Die Suche erfolgt tolerant gegenüber abweichenden Schreibweisen
+        /// (z. B. Leer-, Unter- oder Bindestriche).
+        /// </item>
+        /// <item>
+        /// Enthält ein Sheet ungültige oder leere Zellen, werden diese
+        /// als leere Zeichenfolgen (<c>string.Empty</c>) in die Matrix übernommen.
+        /// </item>
+        /// <item>
+        /// Die erzeugten Textmatrizen dienen ausschließlich der Anzeige
+        /// und Vorschau in der UI (<c>DevicesPreview</c>, <c>NumbersPreview</c>,
+        /// <c>AppAlarmPreview</c>) und werden im <see cref="AlarmDbModel"/> abgelegt.
+        /// </item>
+        /// <item>
+        /// Der eigentliche fachliche Aufbau des Alarm-Modells (Standard- und
+        /// Applikationsalarme, DeviceTypes, DeviceInstanceLabels usw.)
+        /// erfolgt nach dem Einlesen dieser Rohdaten.
+        /// </item>
+        /// </list>
         /// </remarks>
         public AlarmDbModel BuildFromExcel(string filePath)
         {
-            // Öffne die Excel-Datei im Lesemodus.
+            // --- 1. Workbook öffnen ---
             using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            IWorkbook wb = Path.GetExtension(filePath).Equals(".xls", StringComparison.OrdinalIgnoreCase)
+                ? new HSSFWorkbook(fs)
+                : new XSSFWorkbook(fs); // liest auch .xlsm
 
-            // Erzeuge ein NPOI-Workbook-Objekt abhängig vom Dateityp.
-            IWorkbook wb = CreateWorkbook(fs, Path.GetExtension(filePath));
-
-            // Erzeuge ein neues AlarmDbModel mit allen Standard-Alarmbits.
-            var model = CreateBaseModelWithStd(wb);
-
-            // Lade das Tabellenblatt „StA-Cfg“ (Gerätetypenliste).
-            var sta = wb.GetSheet(SHEET_STA)
-                ?? throw new InvalidOperationException($"Sheet '{SHEET_STA}' nicht gefunden.");
-
-            // Daten beginnen hinter der Headerzeile.
-            int dataStart = STA_HEADER_ROW + 1;
-
-            // Anzahl der vorhandenen Gerätetypen ermitteln
-            int deviceTypes = 0;
-            for (int r = dataStart; r <= sta.LastRowNum; r++)
+            // --- 2. Hilfsfunktionen lokal definieren ---
+            static ISheet? FindSheet(IWorkbook wb, params string[] candidates)
             {
-                var row = sta.GetRow(r);
-                if (row == null) continue;
-
-                var devName = GetString(row.GetCell(COL_DEVNAME)).Trim();
-                if (!string.IsNullOrWhiteSpace(devName))
-                    deviceTypes++;
-            }
-
-            // DeviceSetting konfigurieren
-            model.DeviceSettingRows = Math.Max(1, deviceTypes);
-            model.DeviceSettingCols = 3;
-            model.DeviceSetting = new uint[model.DeviceSettingRows, model.DeviceSettingCols];
-            model.DeviceSettingMax = model.DeviceSettingRows;
-
-            // DeviceSetting füllen & Words zählen
-            long wordsTotal = 0;
-            int logicalIdx = 0;
-
-            for (int r = dataStart; r <= sta.LastRowNum; r++)
-            {
-                var row = sta.GetRow(r);
-                if (row == null) continue;
-
-                var devName = GetString(row.GetCell(COL_DEVNAME)).Trim();
-
-                // Wenn Zelle mit Device-Bezeichnung leer ist -> mit nächster Zeile fortfahren
-                if (string.IsNullOrWhiteSpace(devName)) 
-                    continue;
-
-                logicalIdx++;
-
-                var qty = ToUInt(row.GetCell(COL_DEVQTY));
-                var alm = ToUInt(row.GetCell(COL_ALMQTY));
-
-                model.DeviceTypes.Add(new DeviceTypeInfo
+                foreach (var name in candidates)
                 {
-                    DevName = devName,
-                    DevQty = (int)qty,
-                    AlmQty = (int)alm
-                });
-
-                // Matrix: [0] = Geräteanzahl, [1] = Alarmanzahl
-                model.DeviceSetting[logicalIdx - 1, 0] = qty;
-                model.DeviceSetting[logicalIdx - 1, 1] = alm;
-
-                if (qty > 0 && alm > 0)
-                {
-                    var wordsPerDevice = (int)Math.Ceiling(alm / 16.0);
-                    wordsTotal += (long)qty * wordsPerDevice;
+                    var sheet = wb.GetSheet(name);
+                    if (sheet != null) return sheet;
                 }
+                // fallback: tolerant
+                var wanted = candidates.Select(c => c.ToLowerInvariant().Replace(" ", "").Replace("-", "").Replace("_", ""));
+                for (int i = 0; i < wb.NumberOfSheets; i++)
+                {
+                    var s = wb.GetSheetAt(i);
+                    var norm = s.SheetName.ToLowerInvariant().Replace(" ", "").Replace("-", "").Replace("_", "");
+                    if (wanted.Any(w => norm.Contains(w))) return s;
+                }
+                return null;
             }
 
-            // Ergebnisse ins Model schreiben
-            model.DevicesWordCount = (int)Math.Max(1, wordsTotal);
+            static string[,] ReadSheetToMatrix(ISheet? sheet)
+            {
+                if (sheet == null)
+                    return new string[0, 0];
 
-            // Optional: zusätzliche Informationen aus dem Sheet „Devices“
+                int firstRow = sheet.FirstRowNum;
+                int lastRow = sheet.LastRowNum;
+
+                int cols = 0;
+                for (int r = firstRow; r <= lastRow; r++)
+                    cols = Math.Max(cols, sheet.GetRow(r)?.LastCellNum ?? 0);
+                if (cols <= 0)
+                    return new string[0, 0];
+
+                int rows = (lastRow - firstRow) + 1;
+                var matrix = new string[rows, cols];
+                var fmt = new DataFormatter(System.Globalization.CultureInfo.GetCultureInfo("de-DE"));
+
+                for (int r = firstRow; r <= lastRow; r++)
+                {
+                    var row = sheet.GetRow(r);
+                    for (int c = 0; c < cols; c++)
+                    {
+                        var cell = row?.GetCell(c);
+                        matrix[r - firstRow, c] = cell == null ? string.Empty : fmt.FormatCellValue(cell);
+                    }
+                }
+                return matrix;
+            }
+
+            // --- 3. Sheets finden + Matrizen lesen ---
+            // Ggf. weitere mögliche Sheet-Bezeichnungn anhängen, z.B. var sheetAppAlm = FindSheet(wb, "AppAlarm (_AA)", "AppAlarm", "AppAlarmAA");
+
+            var sheetDevices = FindSheet(wb, "Devices");
+            var sheetStaCfg = FindSheet(wb, "StA-Cfg");
+            var sheetAppAlm = FindSheet(wb, "AppAlarm (_AA)");
+
+            string[,] devicesMatrix = ReadSheetToMatrix(sheetDevices);
+            string[,] staCfgTextMatrix = ReadSheetToMatrix(sheetStaCfg);
+            string[,] appAlarmMatrix = ReadSheetToMatrix(sheetAppAlm);
+
+            // --- 4. Bestehende Logik: Model aufbauen ---
+            var model = new AlarmDbModel();
+
+            model = CreateBaseModelWithStd(wb);
+
+            TryReadStaCfgSheet(wb, model);
             TryReadDevicesSheet(wb, model);
+
+            model.DevicesMatrix = devicesMatrix;
+            model.StaCfgTextMatrix = staCfgTextMatrix;
+            model.AppAlarmMatrix = appAlarmMatrix;
 
             return model;
         }
 
-        /// <summary>
-        /// Erstellt ein NPOI-Workbook passend zur Dateierweiterung.
-        /// </summary>
-        /// <param name="s">Geöffneter Stream der Excel-Datei.</param>
-        /// <param name="ext">Dateierweiterung inkl. Punkt (z. B. „.xlsx“).</param>
-        /// <returns>Ein initialisiertes <see cref="IWorkbook"/>.</returns>
-        /// <exception cref="NotSupportedException">Wenn <paramref name="ext"/> nicht unterstützt wird.</exception>
-        private static IWorkbook CreateWorkbook(Stream s, string ext)
-            => ext.ToLowerInvariant() switch
-            {
-                ".xls" => new HSSFWorkbook(s),
-                ".xlsx" or ".xlsm" => new XSSFWorkbook(s),
-                _ => throw new NotSupportedException($"Erweiterung nicht unterstützt: {ext}")
-            };
+
 
         /// <summary>
         /// Liest eine Zelle als String (robust gegenüber unterschiedlichen Zelltypen).
@@ -257,7 +275,7 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
                         {
                             Name = name,
                             AlarmText = comment,
-                            Class = @class   
+                            Class = @class
                         });
                     }
                 }
@@ -266,6 +284,105 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
             return m;
         }
 
+        /// <summary>
+        /// Reads the StA-Cfg sheet and fills the alarm database model with device settings.
+        /// </summary>
+        /// <param name="wb">The opened Excel workbook.</param>
+        /// <param name="model">The alarm database model that receives the device settings.</param>
+        /// <remarks>
+        /// The Excel column "Idx" is the single source of truth for the generated DeviceSetting index.
+        /// Missing Idx values are kept as empty DeviceSetting rows with zero values.
+        /// </remarks>
+        private void TryReadStaCfgSheet(IWorkbook wb, AlarmDbModel model)
+        {
+            var sh = wb.GetSheet(SHEET_STA);
+            if (sh == null)
+                return;
+
+            int dataStart = STA_HEADER_ROW + 1;
+            int maxDeviceTypeIdx = 0;
+
+            #region Determine DeviceSetting Size
+
+            for (int r = dataStart; r <= sh.LastRowNum; r++)
+            {
+                var row = sh.GetRow(r);
+                if (row == null)
+                    continue;
+
+                string devName = GetString(row.GetCell(COL_DEVNAME)).Trim();
+                if (string.IsNullOrWhiteSpace(devName))
+                    continue;
+
+                uint idx = ToUInt(row.GetCell(COL_IDX));
+                if (idx == 0)
+                    continue;
+
+                maxDeviceTypeIdx = Math.Max(maxDeviceTypeIdx, (int)idx);
+            }
+
+            #endregion
+
+            #region Configure DeviceSetting Matrix
+
+            model.DeviceSettingRows = Math.Max(1, maxDeviceTypeIdx);
+            model.DeviceSettingCols = 3;
+            model.DeviceSetting = new uint[model.DeviceSettingRows, model.DeviceSettingCols];
+            model.DeviceSettingMax = model.DeviceSettingRows;
+
+            #endregion
+
+            #region Fill DeviceSetting Matrix
+
+            long wordsTotal = 0;
+
+            for (int r = dataStart; r <= sh.LastRowNum; r++)
+            {
+                var row = sh.GetRow(r);
+                if (row == null)
+                    continue;
+
+                string devName = GetString(row.GetCell(COL_DEVNAME)).Trim();
+                if (string.IsNullOrWhiteSpace(devName))
+                    continue;
+
+                uint idx = ToUInt(row.GetCell(COL_IDX));
+                if (idx == 0)
+                    continue;
+
+                uint qty = ToUInt(row.GetCell(COL_DEVQTY));
+                uint alm = ToUInt(row.GetCell(COL_ALMQTY));
+
+                int deviceSettingRowIndex = (int)idx - 1;
+
+                model.DeviceTypes.Add(new DeviceTypeInfo
+                {
+                    DevName = devName,
+                    DevQty = (int)qty,
+                    AlmQty = (int)alm
+                });
+
+                // DeviceSetting uses the Excel Idx as the authoritative position.
+                // Missing Idx values remain initialized with 0, 0, 0.
+                model.DeviceSetting[deviceSettingRowIndex, 0] = qty;
+                model.DeviceSetting[deviceSettingRowIndex, 1] = alm;
+                model.DeviceSetting[deviceSettingRowIndex, 2] = 0;
+
+                if (qty > 0 && alm > 0)
+                {
+                    int wordsPerDevice = (int)Math.Ceiling(alm / 16.0);
+                    wordsTotal += (long)qty * wordsPerDevice;
+                }
+            }
+
+            #endregion
+
+            #region Write Results To Model
+
+            model.DevicesWordCount = (int)Math.Max(1, wordsTotal);
+
+            #endregion
+        }
         /// <summary>
         /// Liest aus dem Sheet „Devices“ BMK-Gruppen und Instanznamen pro Gerätetyp
         /// und füllt <see cref="AlarmDbModel.DeviceInstanceLabels"/>.

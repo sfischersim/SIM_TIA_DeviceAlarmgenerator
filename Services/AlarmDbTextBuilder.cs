@@ -107,8 +107,14 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
                     var a = m.DeviceSetting[i, 1];
                     var e = m.DeviceSetting[i, 2];
                     if (q != 0) sb.Append($"DeviceSetting[{i + 1}, 0] := {q};").Append(NL);
+                    else sb.Append($"DeviceSetting[{i + 1}, 0] := 0;").Append(NL);
+                    
                     if (a != 0) sb.Append($"DeviceSetting[{i + 1}, 1] := {a};").Append(NL);
+                    else sb.Append($"DeviceSetting[{i + 1}, 1] := 0;").Append(NL);
+
                     if (e != 0) sb.Append($"DeviceSetting[{i + 1}, 2] := {e};").Append(NL);
+                    else sb.Append($"DeviceSetting[{i + 1}, 2] := 0;").Append(NL);
+
                 }
             }
 

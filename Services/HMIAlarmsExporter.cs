@@ -126,77 +126,121 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
                 r.CreateCell(c++).SetCellValue("<No value>"); // Info text
             }
 
+            /// <summary>
+            /// Writes an empty padding row for an unused alarm bit.
+            /// </summary>
+            /// <param name="triggerTag">The trigger tag name.</param>
+            /// <param name="triggerBit">The trigger bit index.</param>
+            /// <param name="ackTag">The acknowledgement tag name.</param>
+            /// <param name="ackBit">The acknowledgement bit index.</param>
+            void WriteEmptyBitRow(string triggerTag, int triggerBit, string ackTag, int ackBit)
+            {
+                var r = sh.CreateRow(rowIndex++);
+                int c = 0;
+
+                r.CreateCell(c++).SetCellValue(id++);          // ID
+                r.CreateCell(c++).SetCellValue("");            // Name
+                r.CreateCell(c++).SetCellValue("");            // Alarm text
+                r.CreateCell(c++).SetCellValue("");            // FieldInfo
+                r.CreateCell(c++).SetCellValue("");            // Class
+                r.CreateCell(c++).SetCellValue(triggerTag);    // Trigger tag
+                r.CreateCell(c++).SetCellValue(triggerBit);    // Trigger bit
+                r.CreateCell(c++).SetCellValue(ackTag);        // PLC acknowledgement tag
+                r.CreateCell(c++).SetCellValue(ackBit);        // PLC acknowledgement bit
+                r.CreateCell(c++).SetCellValue("<No value>");  // Counter tag
+                r.CreateCell(c++).SetCellValue(0);             // PLC acknowledgement bit.1
+                r.CreateCell(c++).SetCellValue("<No value>");  // Group
+                r.CreateCell(c++).SetCellValue(false);         // Report
+                r.CreateCell(c++).SetCellValue("<No value>");  // Info text
+            }
+
             static string Safe(string? s) => string.IsNullOrWhiteSpace(s) ? "" : s.Trim();
 
             // ------------------------------
             // Hauptschleife über alle Gerätetypen
             // ------------------------------
+            #region Alarm Rows
+
+            // Main loop over all configured device types.
             for (int tIndex = 0; tIndex < types.Count; tIndex++)
             {
-                var t = types[tIndex];
-                string devType = t.DevName?.Trim() ?? "";
-                int devQty = Math.Max(0, t.DevQty);
-                int almQty = Math.Max(0, t.AlmQty);
+                var type = types[tIndex];
 
-                // Gerätespezifische Alarme ausgeben
-                if (!string.IsNullOrEmpty(devType) && devQty > 0 && almQty > 0)
+                string devType = type.DevName?.Trim() ?? string.Empty;
+                int devQty = Math.Max(0, type.DevQty);
+                int almQty = Math.Max(0, type.AlmQty);
+
+                if (string.IsNullOrWhiteSpace(devType))
+                    continue;
+
+                if (devQty <= 0 || almQty <= 0)
+                    continue;
+
+                // Each device type starts on a clean word boundary.
+                globalBitIndex = AlignToNextWord(globalBitIndex);
+
+                // The label map contains the real configured device instances from the Devices sheet.
+                labels.TryGetValue(devType, out var instMap);
+                int devicesFound = instMap?.Count ?? 0;
+
+                for (int inst = 1; inst <= devQty; inst++)
                 {
-                    int wordsPerDevice = (int)Math.Ceiling(almQty / 16.0);
-                    int bitsPerDevice = wordsPerDevice * 16;
+                    currentDeviceIndex1Based = inst;
 
-                    // Wie viele Instanzen sind im Label-Set tatsächlich vorhanden?
-                    labels.TryGetValue(devType, out var instMap);
-                    int devicesFound = instMap?.Count ?? 0;
+                    string bmk = string.Empty;
+                    string nameS1 = string.Empty;
+                    string nameS2 = string.Empty;
 
-                    for (int inst = 1; inst <= devQty; inst++)
+                    if (instMap != null && instMap.TryGetValue(inst, out var info))
                     {
-                        currentDeviceIndex1Based = inst;   // <-- wichtig für Alm16
-                        int startBit = globalBitIndex;
-
-                        // Instanzlabels (BMK/NameS1/NameS2)
-                        string bmk = "";
-                        string nameS1 = "";
-                        string nameS2 = "";
-                        if (instMap != null && instMap.TryGetValue(inst, out var info))
-                        {
-                            bmk = info?.BmkGroup ?? "";
-                            nameS1 = info?.NameS1 ?? "";
-                        }
-
-                        bool isReserve = inst > devicesFound && devicesFound > 0;
-
-                        for (int bit = 0; bit < almQty; bit++)
-                        {
-                            int trigBit = (startBit + bit) % 16;
-
-                            // Name exakt wie früher: <DevType>_<Bit>_<Instanz:000>
-                            string name = $"{devType}_{bit}_{inst:000}";
-
-                            // Text & Klasse bestimmen (Rule + Alt-Tool-Format)
-                            var (cls, text) = ResolveClassAndText(
-                                devType, name, bit, isReserve, rowIndex,
-                                bmk, nameS1, nameS2,
-                                appAlarmTextMap
-                            );
-
-                            WriteRow(
-                                name: name,
-                                text: text,
-                                @class: cls,
-                                triggerTag: "Devices",
-                                trigBit: trigBit,
-                                ackTag: "Devices_Ack",
-                                ackBit: trigBit
-                            );
-                        }
-
-                        // Nächste Instanz auf Wortgrenze schieben
-                        globalBitIndex += bitsPerDevice;
+                        bmk = info?.BmkGroup ?? string.Empty;
+                        nameS1 = info?.NameS1 ?? string.Empty;
                     }
+
+                    bool isReserve = inst > devicesFound && devicesFound > 0;
+
+                    #region Alarm Bits
+
+                    for (int bit = 0; bit < almQty; bit++)
+                    {
+                        int hmiBitIndex = ToHmiByteSwappedBitIndex(globalBitIndex);
+
+                        string name = $"{devType}_{bit}_{inst:000}";
+
+                        var (cls, text) = ResolveClassAndText(
+                            devType,
+                            name,
+                            bit,
+                            isReserve,
+                            rowIndex,
+                            bmk,
+                            nameS1,
+                            nameS2,
+                            appAlarmTextMap
+                        );
+
+                        WriteRow(
+                            name: name,
+                            text: text,
+                            @class: cls,
+                            triggerTag: "Devices",
+                            trigBit: hmiBitIndex,
+                            ackTag: "Devices_Ack",
+                            ackBit: hmiBitIndex
+                        );
+
+                        // The logical alarm bit stream continues inside the same device type.
+                        globalBitIndex++;
+                    }
+
+                    #endregion
                 }
+
+                // The next device type starts on a new word.
+                globalBitIndex = AlignToNextWord(globalBitIndex);
             }
 
-            // Spaltenbreite optimieren (optional)
+            #endregion            // Spaltenbreite optimieren (optional)
             for (int i = 0; i < headers.Length; i++)
                 sh.AutoSizeColumn(i);
 
@@ -291,7 +335,7 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
                                 {
                                     var aa = appAlm[appIdx];
                                     // bevorzugt "Name" + „Alarmtext“-Spalte, sonst Name als Fallback
-                                    appText = Safe(!string.IsNullOrWhiteSpace(aa.AlarmText) ? $"{bmk}: {aa.AlarmText}" : $"{name} !Alarmtext nicht definiert!" );
+                                    appText = Safe(!string.IsNullOrWhiteSpace(aa.AlarmText) ? $"{bmk}: {aa.AlarmText}" : $"{name} !Alarmtext nicht definiert!");
                                 }
 
                                 if (string.IsNullOrEmpty(appText))
@@ -502,5 +546,48 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services
             }
 
         }
+
+        #region HMI Bit Mapping
+
+        /// <summary>
+        /// Converts an absolute logical alarm bit index to the HMI bit index with swapped low and high byte inside each 16-bit word.
+        /// </summary>
+        /// <param name="logicalBitIndex">The absolute logical alarm bit index.</param>
+        /// <returns>The HMI bit index with swapped byte order inside the related 16-bit word.</returns>
+        private static int ToHmiByteSwappedBitIndex(int logicalBitIndex)
+        {
+            if (logicalBitIndex < 0)
+                throw new ArgumentOutOfRangeException(nameof(logicalBitIndex), "The logical bit index cannot be negative.");
+
+            int wordStartBitIndex = (logicalBitIndex / 16) * 16;
+            int bitIndexInsideWord = logicalBitIndex % 16;
+
+            // The HMI import expects low byte and high byte to be swapped inside each 16-bit word.
+            int swappedBitIndexInsideWord = bitIndexInsideWord < 8
+                ? bitIndexInsideWord + 8
+                : bitIndexInsideWord - 8;
+
+            return wordStartBitIndex + swappedBitIndexInsideWord;
+        }
+
+        /// <summary>
+        /// Aligns a logical bit index to the first bit of the next 16-bit word if needed.
+        /// </summary>
+        /// <param name="logicalBitIndex">The logical bit index to align.</param>
+        /// <returns>The aligned logical bit index.</returns>
+        private static int AlignToNextWord(int logicalBitIndex)
+        {
+            if (logicalBitIndex < 0)
+                throw new ArgumentOutOfRangeException(nameof(logicalBitIndex), "The logical bit index cannot be negative.");
+
+            int remainder = logicalBitIndex % 16;
+
+            if (remainder == 0)
+                return logicalBitIndex;
+
+            return logicalBitIndex + (16 - remainder);
+        }
+
+        #endregion
     }
 }

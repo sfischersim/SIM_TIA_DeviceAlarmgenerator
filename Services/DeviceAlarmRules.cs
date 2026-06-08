@@ -189,7 +189,7 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public string DeviceTypeName => "SQ";
 
         /// <inheritdoc />
-        public int AlarmsPerDevice => 8;
+        public int AlarmsPerDevice => 9;
 
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
@@ -201,7 +201,8 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
             ("Bediener-Dialog benötigt","Warnings"),
             ("Grundstellung nicht erreicht","Warnings"),
             ("AutoStop nicht erreicht","Warnings"),
-            ("Systemfehler","Errors")
+            ("Systemfehler","Errors"),
+            ("in Schritt- oder Zyklusbetrieb", "Warnings")
         };
 
         /// <inheritdoc />
@@ -229,14 +230,10 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
-            ("Sammelfehler HW & CFG","Errors"),
-            ("Sammelstörung","Errors"),
-            ("Sensorfehler","Errors"),
-            ("Sensorfehler","Errors"),
-            ("Kommunikationsfehler","Errors"),
-            ("IO Fehler","Errors"),
-            ("Geräte Fehler","Errors"),
-            ("Konfigurationsfehler","Errors")
+            ("Konfigurationsfehler","Errors"),
+            ("Sensorfehler Grundstellung","Errors"),
+            ("Sensorfehler Arbeitsstellung","Errors"),
+            
         };
 
         /// <inheritdoc />
@@ -259,22 +256,16 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public string DeviceTypeName => "2DSPM";
 
         /// <inheritdoc />
-        public int AlarmsPerDevice => 11;
+        public int AlarmsPerDevice => 5;
 
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
-            ("Sammelfehler HW & CFG","Errors"),
-            ("Sammelstörung","Errors"),
-            ("Sensorfehler","Errors"),
-            ("Sensorfehler","Errors"),
-            ("Sensorfehler","Errors"),
-            ("Sensorfehler","Errors"),
-            ("Sensorfehler","Errors"),
-            ("Kommunikationsfehler","Errors"),
-            ("IO Fehler","Errors"),
-            ("Geräte Fehler","Errors"),
-            ("Konfigurationsfehler","Errors")
+            ("Konfigurationsfehler","Errors"),
+            ("Sensorfehler Grundstellung","Errors"),
+            ("Sensorfehler Arbeitsstellung","Errors"),
+            ("Sensorfehler Anschlag Arbeitsstellung","Errors"),
+            ("Sensorfehler Anschlag Grundstellung","Errors"),
         };
 
         /// <inheritdoc />
@@ -297,13 +288,12 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public string DeviceTypeName => "AI";
 
         /// <inheritdoc />
-        public int AlarmsPerDevice => 13;
+        public int AlarmsPerDevice => 11;
 
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
-            ("Sammelfehler HW & CFG","Errors"),
-            ("Sammelstörung","Errors"),
+            ("Konfigurationsfehler","Errors"),
             ("Datentyp Rohwert unzulässig","Errors"),
             ("Rohwert außerhalb Messbereich","Errors"),
             ("Wertesprung","Errors"),
@@ -313,8 +303,8 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
             ("Max überschritten","Warnings"),
             ("Kommunikationsfehler","Errors"),
             ("IO Fehler","Errors"),
-            ("Geräte Fehler","Errors"),
-            ("Konfigurationsfehler","Errors")
+            ("Gerätefehler","Errors"),
+            
         };
 
         /// <inheritdoc />
@@ -337,20 +327,16 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public string DeviceTypeName => "DO";
 
         /// <inheritdoc />
-        public int AlarmsPerDevice => 9;
+        public int AlarmsPerDevice => 4;
 
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
             ("Konfigurationsfehler","Errors"),
-            ("Sensorfehler","Errors"),
-            ("Sensorfehler","Errors"),
-            ("Laufzeitüberwachung","Errors"),
-            ("Fehler Vakuum","Errors"),
-            ("IO Fehler","Errors"),
-            ("Geräte Fehler","Errors"),
-            ("Konfigurationsfehler","Errors"),
-            ("Allgemeiner Fehler","Errors")
+            ("Feedbackfehler Arbeitsstellung","Errors"),
+            ("Laufzeitfehler","Errors"),
+            ("Fehler Vakuum","Errors")
+
         };
 
         /// <inheritdoc />
@@ -373,19 +359,17 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public string DeviceTypeName => "DI";
 
         /// <inheritdoc />
-        public int AlarmsPerDevice => 8;
+        public int AlarmsPerDevice => 5;
 
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
             ("Konfigurationsfehler","Errors"),
-            ("Fehler erwartet Sensor nicht geschaltet","Errors"),
-            ("Fehler erwartet Sensor geschaltet","Errors"),
-            ("Falsches Anfangssignal","Errors"),
-            ("Signal nicht wie erwartet","Errors"),
-            ("Kommunikationsfehler","Errors"),
-            ("Hardwarefehler","Errors"),
-            ("Gerätefehler","Errors")
+            ("Fehler erwarte Sensor nicht geschaltet","Errors"),
+            ("Fehler erwarte Sensor geschaltet","Errors"),
+            ("Fehler falsches Anfangssignal","Errors"),
+            ("Fahler await (Signal nicht wie erwartet)","Errors"),
+  
         };
 
         /// <inheritdoc />
@@ -408,15 +392,20 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public string DeviceTypeName => "APosi";
 
         /// <inheritdoc />
-        public int AlarmsPerDevice => 4;
+        public int AlarmsPerDevice => 8;
 
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
+            ("Konfigurationsfehler","Errors"),
             ("Applikationswarnung","Warnings"),
             ("Applikationsfehler","Errors"),
             ("Modul / HW Warnung","Warnings"),
-            ("Modul / HW Fehler","Errors")
+            ("Modul / HW Fehler","Errors"),
+            ("Laufzeitfehler","Errors"),
+            ("Kommunikationsfehler","Errors"),
+            ("IO Fehler","Errors")
+
         };
 
         /// <inheritdoc />
@@ -439,18 +428,16 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public string DeviceTypeName => "Feeds";
 
         /// <inheritdoc />
-        public int AlarmsPerDevice => 7;
+        public int AlarmsPerDevice => 5;
 
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
-            ("Teilmangel Wendelförderer","Warnings"),
-            ("Teilmangel Bunker","Warnings"),
-            ("Teilmangel Kopfstück","Warnings"),
-            ("Teilmangel Min","Warnings"),
-            ("Teilmangel Max","Warnings"),
-            ("Laufzeit IN1","Warnings"),
-            ("Laufzeit IN2","Warnings")
+            ("Teilmangel im Wendelförderer","Warnings"),
+            ("Teilmangel im Bunker","Warnings"),
+            ("Teilmangel am Kopfstück","Warnings"),
+            ("Teilmangel am Stau Min","Warnings"),
+            ("Klemmer im Topf","Warnings"),
         };
 
         /// <inheritdoc />
@@ -473,18 +460,17 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public string DeviceTypeName => "BC";
 
         /// <inheritdoc />
-        public int AlarmsPerDevice => 7;
+        public int AlarmsPerDevice => 5;
 
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
-            ("Sammelfehler HW & CFG","Errors"),
-            ("Sammelstörung","Errors"),
+            ("Konfigurationsfehler","Errors"),
             ("Fehler Auswertung","Errors"),
             ("Kommunikationsfehler","Errors"),
             ("IO Fehler","Errors"),
-            ("Allgemeiner Fehler","Errors"),
-            ("Konfigurationsfehler","Errors")
+            ("Gerätefehler","Errors"),
+            
         };
 
         /// <inheritdoc />
@@ -512,13 +498,14 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
-            ("Sammelfehler HW & CFG","Errors"),
-            ("Sammelstörung","Errors"),
+            ("Konfigurationsfehler","Errors"),
             ("Fehler Auswertung","Errors"),
+            ("Hardwarefehler","Errors"),
             ("Kommunikationsfehler","Errors"),
             ("IO Fehler","Errors"),
-            ("Allgemeiner Fehler","Errors"),
-            ("Konfigurationsfehler","Errors")
+            ("Gerätefehler","Errors"),
+            ("Laufzeitfehler", "Errors")
+            
         };
 
         /// <inheritdoc />
@@ -660,19 +647,18 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public string DeviceTypeName => "HT_KSV";
 
         /// <inheritdoc />
-        public int AlarmsPerDevice => 8;
+        public int AlarmsPerDevice => 6;
 
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
-            ("Sammelfehler HW & CFG","Errors"),
-            ("Sammelstörung","Errors"),
+            ("Konfigurationsfehler","Errors"),
             ("Loopalarm","Errors"),
             ("Fühlerfehler","Errors"),
             ("Kommunikationsfehler","Errors"),
             ("IO Fehler","Errors"),
-            ("Allgemeiner Fehler","Errors"),
-            ("Konfigurationsfehler","Errors")
+            ("Gerätefehler","Errors"),
+            
         };
 
         /// <inheritdoc />
@@ -695,18 +681,20 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public string DeviceTypeName => "Keyence_MC";
 
         /// <inheritdoc />
-        public int AlarmsPerDevice => 7;
+        public int AlarmsPerDevice => 6;
 
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
             ("Konfigurationsfehler","Errors"),
-            ("Laufzeit überschritten","Errors"),
-            ("Falsches Kommando","Errors"),
-            ("Falsches Programm","Errors"),
+            ("Falsche Programmnummer","Errors"),
             ("Kommunikationsfehler","Errors"),
             ("IO Fehler","Errors"),
-            ("Geräte Fehler","Errors")
+            ("Geräte Fehler","Errors"),
+            ("Laufzeitfehler","Errors"),
+            
+            
+            
         };
 
         /// <inheritdoc />
@@ -734,14 +722,15 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
-            ("Konfigurationsfehler","Errors"),
-            ("Laufzeit überschritten","Errors"),
+            ("Laufzeitfehler","Errors"),
             ("Falsches Kommando","Errors"),
             ("Falsches Programm","Errors"),
-            ("Überwachung hat angesprochen","Errors"),
+            ("Kraftüberwachung hat angesprochen","Errors"),
             ("Kommunikationsfehler","Errors"),
             ("IO Fehler","Errors"),
-            ("Geräte Fehler","Errors")
+            ("Device Fehler","Errors"),
+            ("Konfigurationsfehler","Errors")
+
         };
 
         /// <inheritdoc />
@@ -797,13 +786,13 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
-            ("Laufzeitfehler","Errors"),
-            ("Falsches Kommando","Errors"),
+            ("Konfigurationsfehler","Errors"),
             ("Falsche Programmnummer","Errors"),
             ("Warnung","Warnings"),
             ("Kommunikationsfehler","Errors"),
             ("Hardwarefehler","Errors"),
-            ("Device nicht bereit","Errors")
+            ("Gerätefehler","Errors"),
+            ("Laufzeitfehler","Errors")
         };
 
         /// <inheritdoc />
@@ -860,24 +849,24 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public string DeviceTypeName => "RIT_WEIS";
 
         /// <inheritdoc />
-        public int AlarmsPerDevice => 13;
+        public int AlarmsPerDevice => 12;
 
         /// <inheritdoc />
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
-            ("Sammelfehler HW & CFG","Errors"),
-            ("Allgemeiner Fehler","Errors"),
+            ("Konfigurationsfehler","Errors"),
             ("Störung Schutz","Errors"),
-            ("Alarm Timeout","Errors"),
-            ("Alarm Position überfahren","Errors"),
-            ("Alarm Safety","Errors"),
-            ("Alarm Summe Störung","Errors"),
-            ("Alarm Summe Warnung","Warnings"),
-            ("Alarm Zwangsdynamisierung","Errors"),
+            ("Timeout","Errors"),
+            ("Position überfahren","Errors"),
+            ("Safety","Errors"),
+            ("Fehler","Errors"),
+            ("Warnung","Warnings"),
+            ("Zwangsdynamisierung","Errors"),
             ("Kommunikationsfehler","Errors"),
             ("IO Fehler","Errors"),
-            ("Device Fehler","Errors"),
-            ("Konfigurationsfehler","Errors")
+            ("Gerätefehler","Errors"),
+            ("Hochlaufzeit aktiv, Automatik gesperrt.","Errors"),
+
         };
 
         /// <inheritdoc />
@@ -906,10 +895,10 @@ namespace SIM_TIA_DeviceAlarmgenerator.Services.DeviceRules
         public (string Text, string Class)[] ErrorsTemplate => new (string, string)[]
         {
             ("Konfigurationsfehler","Errors"),
-            ("Laufzeit überschritten","Errors"),
+            ("Laufzeitfehler","Errors"),
             ("Kommunikationsfehler","Errors"),
             ("IO Fehler","Errors"),
-            ("Geräte Fehler","Errors")
+            ("Gerätefehler","Errors")
         };
 
         /// <inheritdoc />

@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SIM_TIA_DeviceAlarmgenerator.View"
-        xmlns:localVM="clr-namespace:SIM_TIA_DeviceAlarmgenerator.ViewModel"
+        xmlns:vm="clr-namespace:SIM_TIA_DeviceAlarmgenerator.ViewModel"
         mc:Ignorable="d"
         Title="MainWindow" Height="800" Width="1200"
         Background="{StaticResource Brush.Background}">
@@ -55,7 +55,7 @@
     </Window.Resources>
 
     <Window.DataContext>
-        <localVM:MainViewModel/>
+        <vm:MainViewModel/>
     </Window.DataContext>
 
     <Grid>
@@ -84,16 +84,6 @@
                             <TextBlock FontFamily="{StaticResource IconFont}" Text="" Margin="0,0,6,0"
                                        Foreground="{StaticResource Brush.TextSecondary}"/>
                             <TextBlock Text="Öffnen"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource PrimaryButton}" 
-                            Command="{Binding BuildAlarmsFromStaCfgCommand}"
-                            ToolTip="Alarme aus StA-Konfiguration generieren">
-
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock FontFamily="{StaticResource IconFont}" Text="" Margin="0,0,6,0"
-                                       Foreground="{StaticResource Brush.TextSecondary}"/>
-                            <TextBlock Text="Alarme bauen"/>
                         </StackPanel>
                     </Button>
                     <Button Style="{StaticResource PrimaryButton}"
@@ -262,11 +252,6 @@
             <DockPanel Margin="12,6">
                 <TextBlock DockPanel.Dock="Left" Text="{Binding Status}" 
                            Foreground="{StaticResource Brush.TextSecondary}"/>
-                <ProgressBar DockPanel.Dock="Right" Width="180" Height="6"
-                             IsIndeterminate="{Binding IsBusy}"
-                             Foreground="{StaticResource Brush.Primary}"
-                             Background="{StaticResource Brush.Border}"
-                             Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             </DockPanel>
         </Border>
 
